@@ -1,1 +1,18 @@
-/.idea
+# IntelliJ IDEA / Cursive
+
+.idea/
+*.iml
+*.iws
+
+# Leiningen / Clojure
+/target/
+pom.xml
+pom.xml.asc
+*.jar
+*.class
+
+# REPL / nREPL
+.nrepl-port
+.nrepl-history
+.cpcache/
+
