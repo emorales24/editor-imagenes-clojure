@@ -1,6 +1,15 @@
-# tp2-2026c1-morales-giannotti
+# FIUBA - Paradigmas de Programación
 
-FIXME: description
+## Procesamiento de imágenes con programación funcional - Trabajo Práctico 2
+
+### Docentes
+- **Jefe de Cátedra:** Diego Essaya  
+- **Jefe de Trabajos Prácticos:** Santiago Maraggi
+- **Correctora:** Macarena Vita Sanchez  
+
+### Integrantes del Grupo
+- Eduardo José Morales Depablos - 113860
+- Fausto Giannotti - 113365
 
 ## Installation
 
