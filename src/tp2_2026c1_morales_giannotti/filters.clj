@@ -1,8 +1,6 @@
 (ns tp2-2026c1-morales-giannotti.filters
   (:import [java.awt.image BufferedImage]))
 
-"Canal seria cada componente de color (R, G, B) y el canal alfa (A) que representa la transparencia."
-
 (defn limitar-canal
   "Limita un valor numerico al rango valido de un canal RGB."
   [valor]
@@ -11,6 +9,8 @@
     (> valor 255) 255
     :else (int valor)))
 
+;; Canal seria cada componente de color (R, G, B) y el canal alfa (A),
+;; que representa la transparencia.
 (defn argb->canales
   "Convierte un entero ARGB en un mapa de canales."
   [argb]
@@ -91,6 +91,69 @@
       (max 0)
       (min (dec limite-exclusivo))))
 
+;; Lee un pixel de la imagen y lo pasa al mapa {:a :r :g :b}.
+(defn- canales-del-pixel
+  [^BufferedImage imagen x y]
+  (argb->canales (.getRGB imagen x y)))
+
+;; Calcula la posicion real de un vecino dentro de la imagen.
+(defn- coordenada-vecina
+  [posicion indice-kernel radio limite]
+  (coordenada-valida (+ posicion (- indice-kernel radio)) limite))
+
+;; Suma el aporte de un vecino multiplicado por el peso del kernel.
+(defn- sumar-vecino
+  [^BufferedImage imagen kernel radio ancho alto x y acumulado ky kx]
+  (let [origen-x (coordenada-vecina x kx radio ancho)
+        origen-y (coordenada-vecina y ky radio alto)
+        peso (get-in kernel [ky kx])
+        {:keys [r g b]} (canales-del-pixel imagen origen-x origen-y)]
+    (-> acumulado
+        (update :r + (* peso r))
+        (update :g + (* peso g))
+        (update :b + (* peso b)))))
+
+;; Recorre una fila del kernel para un pixel dado.
+(defn- sumar-fila-del-kernel
+  [imagen kernel radio ancho alto x y acumulado ky]
+  (reduce
+   (fn [acumulado-interno kx]
+     (sumar-vecino imagen kernel radio ancho alto x y acumulado-interno ky kx))
+   acumulado
+   (range (count kernel))))
+
+;; Acumula todos los vecinos que participan en la convolucion de un pixel.
+(defn- sumar-vecinos
+  [imagen kernel radio ancho alto x y]
+  (reduce
+   (fn [acumulado ky]
+     (sumar-fila-del-kernel imagen kernel radio ancho alto x y acumulado ky))
+   {:r 0.0 :g 0.0 :b 0.0}
+   (range (count kernel))))
+
+;; Normaliza la suma final y conserva el alfa original.
+(defn- aplicar-divisor-y-offset
+  [sumas divisor offset alfa]
+  {:a alfa
+   :r (+ offset (/ (:r sumas) divisor))
+   :g (+ offset (/ (:g sumas) divisor))
+   :b (+ offset (/ (:b sumas) divisor))})
+
+;; Calcula el nuevo valor de un pixel despues de aplicar el kernel.
+(defn- pixel-convolucionado
+  [imagen kernel divisor offset ancho alto radio x y]
+  (let [{:keys [a]} (canales-del-pixel imagen x y)
+        sumas (sumar-vecinos imagen kernel radio ancho alto x y)]
+    (canales->argb (aplicar-divisor-y-offset sumas divisor offset a))))
+
+;; Calcula una fila completa, lo que permite paralelizar por filas.
+(defn- convolucionar-fila
+  [imagen kernel divisor offset ancho alto radio y]
+  (int-array
+   (map (fn [x]
+          (pixel-convolucionado imagen kernel divisor offset ancho alto radio x y))
+        (range ancho))))
+
 (defn convolucionar
   "Aplica un kernel cuadrado a la imagen y devuelve una imagen nueva.
   Los bordes se resuelven usando la coordenada valida mas cercana."
@@ -99,37 +162,14 @@
         alto (.getHeight imagen)
         tamanio-kernel (count kernel)
         radio (quot tamanio-kernel 2)
+        ;; Cada fila se calcula en paralelo leyendo siempre la imagen original.
         filas (doall
                (pmap
                 (fn [y]
-                  (int-array
-                   (map
-                    (fn [x]
-                      (let [{:keys [a]} (argb->canales (.getRGB imagen x y))
-                            sumas (reduce
-                                   (fn [acumulado ky]
-                                     (reduce
-                                      (fn [acumulado-interno kx]
-                                        (let [origen-x (coordenada-valida (+ x (- kx radio)) ancho)
-                                              origen-y (coordenada-valida (+ y (- ky radio)) alto)
-                                              peso (get-in kernel [ky kx])
-                                              {:keys [r g b]} (argb->canales (.getRGB imagen origen-x origen-y))]
-                                          (-> acumulado-interno
-                                              (update :r + (* peso r))
-                                              (update :g + (* peso g))
-                                              (update :b + (* peso b)))))
-                                      acumulado
-                                      (range tamanio-kernel)))
-                                   {:r 0.0 :g 0.0 :b 0.0}
-                                   (range tamanio-kernel))]
-                        (canales->argb
-                         {:a a
-                          :r (+ offset (/ (:r sumas) divisor))
-                          :g (+ offset (/ (:g sumas) divisor))
-                          :b (+ offset (/ (:b sumas) divisor))})))
-                    (range ancho))))
+                  (convolucionar-fila imagen kernel divisor offset ancho alto radio y))
                 (range alto)))
         ^BufferedImage salida (copiar-imagen-compatible imagen)]
+    ;; La escritura de la imagen final se hace al terminar los calculos.
     (doseq [[y ^ints fila] (map-indexed vector filas)]
       (.setRGB salida 0 y ancho 1 fila 0 ancho))
     salida))
