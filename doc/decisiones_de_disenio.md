@@ -1,4 +1,4 @@
-# Decisiones de diseno - nucleo funcional
+# Decisiones de diseno
 
 ## Objetivo
 
