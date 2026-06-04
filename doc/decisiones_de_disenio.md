@@ -66,3 +66,38 @@ La funcion `aplicar-pipeline` aplica los filtros en orden con `reduce`.
 El nucleo funcional solo recibe una imagen, aplica transformaciones y devuelve una imagen nueva.
 
 Esto permite testearlo por separado y reutilizarlo desde una interfaz grafica, una interfaz de consola u otra capa de entrada/salida.
+
+## Capa de presentacion
+
+La interfaz grafica esta en `app.clj` y usa **Swing**, que viene incluido en el JDK. Se eligio Swing en lugar de JavaFX para evitar dependencias externas con binarios nativos por plataforma: asi `lein run` funciona sin configuracion adicional en cualquier sistema operativo, que es justamente la condicion de correccion (clonar en limpio y ejecutar).
+
+`app.clj` concentra toda la impureza del programa:
+
+- abrir y guardar archivos (`ImageIO`),
+- dibujar la imagen y manejar eventos de los botones,
+- el estado mutable de la aplicacion.
+
+El namespace `filters.clj` no conoce a `app.clj`: la dependencia va siempre `core` → `app` → `filters`.
+
+## Estado de la aplicacion
+
+El estado vive en un unico `atom`:
+
+```clojure
+{:imagen-original ...  ; la imagen tal como se cargo
+ :imagen-actual   ...  ; la imagen que se esta mostrando
+ :archivo         ...  ; el archivo asociado (para "Guardar")
+ :pipeline        []}  ; vector de ids de filtros
+```
+
+Mantener la imagen original aparte permite que "Aplicar" siempre parta de ella y que "Reset" la restaure sin reabrir el archivo.
+
+## Concurrencia
+
+Aplicar el pipeline puede tardar, asi que no debe correr en el hilo de la interfaz (si no, la ventana se congela). El esquema es:
+
+1. Al presionar **Aplicar**, se marca la UI como "Procesando…" (botones deshabilitados y cursor de reloj).
+2. El calculo se lanza en otro hilo con `future`.
+3. Cuando termina, el refresco de la imagen vuelve al hilo de la interfaz con `SwingUtilities/invokeLater` (Swing solo permite tocar la UI desde su propio hilo).
+
+Ademas, cada filtro paraleliza su trabajo internamente con `pmap` (una fila por tarea), aprovechando todos los cores. Es seguro porque cada pixel de salida se calcula leyendo la imagen original, que es inmutable durante ese filtro.
