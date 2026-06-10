@@ -67,17 +67,21 @@ El nucleo funcional solo recibe una imagen, aplica transformaciones y devuelve u
 
 Esto permite testearlo por separado y reutilizarlo desde una interfaz grafica, una interfaz de consola u otra capa de entrada/salida.
 
-## Capa de presentacion
+## Capas y separacion de responsabilidades
 
-La interfaz grafica esta en `app.clj` y usa **Swing**, que viene incluido en el JDK. Se eligio Swing en lugar de JavaFX para evitar dependencias externas con binarios nativos por plataforma: asi `lein run` funciona sin configuracion adicional en cualquier sistema operativo, que es justamente la condicion de correccion (clonar en limpio y ejecutar).
+El programa sigue la separacion que pide la consigna entre **logica pura**, **E/S de archivos** e **interfaz**, repartida en namespaces:
 
-`app.clj` concentra toda la impureza del programa:
+- **`filters.clj`**: logica pura de procesamiento (filtros y pipeline). No conoce a ningun otro namespace.
+- **`io.clj`**: entrada/salida de archivos. Lee y escribe imagenes (`ImageIO`), deduce el formato segun la extension, aplana el alfa para JPEG y muestra los dialogos de seleccion de archivo. No depende del estado ni de los componentes de la UI: recibe la imagen y el archivo (o el frame padre) como argumentos.
+- **`ui-helpers.clj`**: helpers **puros** de la capa de presentacion (`quitar-en` para editar el pipeline, `factor-de-escala` para ajustar la imagen al area visible). Al estar libres de Swing se pueden testear de forma aislada (`ui_helpers_test.clj`).
+- **`app.clj`**: la interfaz grafica en si (construccion de la ventana), el estado mutable de la aplicacion, el manejo de eventos y la concurrencia. Coordina a `filters`, `io` y `ui-helpers`, pero la E/S concreta y los helpers puros ya no viven aca.
+- **`core.clj`**: punto de entrada; solo lanza la interfaz.
 
-- abrir y guardar archivos (`ImageIO`),
-- dibujar la imagen y manejar eventos de los botones,
-- el estado mutable de la aplicacion.
+La dependencia va siempre `core` → `app` → (`filters`, `io`, `ui-helpers`); las capas de abajo no conocen a las de arriba.
 
-El namespace `filters.clj` no conoce a `app.clj`: la dependencia va siempre `core` → `app` → `filters`.
+### Por que Swing
+
+La interfaz usa **Swing**, que viene incluido en el JDK. Se eligio Swing en lugar de JavaFX para evitar dependencias externas con binarios nativos por plataforma: asi `lein run` funciona sin configuracion adicional en cualquier sistema operativo, que es justamente la condicion de correccion (clonar en limpio y ejecutar).
 
 ## Estado de la aplicacion
 

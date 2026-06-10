@@ -1,18 +1,16 @@
 (ns tp2-2026c1-morales-giannotti.app
   "Capa de presentacion: interfaz grafica (Swing), estado de la aplicacion,
-  manejo de eventos y entrada/salida de archivos. Toda la impureza vive aca;
-  la logica pura de filtros vive en el namespace filters."
-  (:require [clojure.string :as cadena]
-            [tp2-2026c1-morales-giannotti.filters :as filtros])
+  manejo de eventos y concurrencia. La E/S de archivos vive en el namespace io,
+  los helpers puros de UI en ui-helpers y la logica de filtros en filters."
+  (:require [tp2-2026c1-morales-giannotti.filters :as filtros]
+            [tp2-2026c1-morales-giannotti.io :as io]
+            [tp2-2026c1-morales-giannotti.ui-helpers :as ui])
   (:import [javax.swing JFrame JPanel JButton JLabel JComboBox JList JScrollPane
-            DefaultListModel JFileChooser JMenuBar JMenu JMenuItem SwingUtilities
+            DefaultListModel JMenuBar JMenu JMenuItem SwingUtilities
             ImageIcon BorderFactory BoxLayout AbstractButton JProgressBar JViewport]
-           [javax.swing.filechooser FileNameExtensionFilter]
-           [java.awt BorderLayout Dimension Cursor Color Image]
+           [java.awt BorderLayout Dimension Cursor Image]
            [java.awt.event ActionListener ComponentAdapter]
-           [java.awt.image BufferedImage]
-           [javax.imageio ImageIO]
-           [java.io File]))
+           [java.awt.image BufferedImage]))
 
 ;; -----------------------------------------------------------------------------
 ;; Estado
@@ -35,38 +33,6 @@
   (:imagen-actual @estado))
 
 ;; -----------------------------------------------------------------------------
-;; Helpers puros de la capa de presentacion
-;; -----------------------------------------------------------------------------
-
-(defn- quitar-en
-  "Devuelve el vector sin el elemento que esta en el indice dado."
-  [coleccion indice]
-  (vec (concat (subvec coleccion 0 indice)
-               (subvec coleccion (inc indice)))))
-
-(defn- formato-de-archivo
-  "Deduce el formato de imagen a partir de la extension del archivo."
-  [^File archivo]
-  (let [nombre (.getName archivo)
-        punto (.lastIndexOf nombre ".")]
-    (if (neg? punto)
-      "png"
-      (cadena/lower-case (subs nombre (inc punto))))))
-
-(defn- preparar-para-formato
-  "JPEG no soporta canal alfa, asi que para ese formato se aplana la imagen
-  sobre un fondo blanco. Para el resto se devuelve la imagen tal cual."
-  [^BufferedImage imagen formato]
-  (if (contains? #{"jpg" "jpeg"} formato)
-    (let [copia (BufferedImage. (.getWidth imagen) (.getHeight imagen)
-                                BufferedImage/TYPE_INT_RGB)
-          lienzo (.createGraphics copia)]
-      (.drawImage lienzo imagen 0 0 Color/WHITE nil)
-      (.dispose lienzo)
-      copia)
-    imagen))
-
-;; -----------------------------------------------------------------------------
 ;; Actualizacion de la interfaz
 ;; -----------------------------------------------------------------------------
 
@@ -78,20 +44,12 @@
     (doseq [id-filtro (:pipeline @estado)]
       (.addElement modelo (filtros/nombre-filtro id-filtro)))))
 
-(defn- factor-de-escala
-  "Factor para que la imagen entre en el area disponible conservando proporciones.
-  Solo reduce (nunca agranda): las imagenes mas chicas se muestran a tamano real."
-  [ancho-img alto-img ancho-disp alto-disp]
-  (min 1.0
-       (/ (double ancho-disp) ancho-img)
-       (/ (double alto-disp) alto-img)))
-
 (defn- ^Image imagen-escalada
   "Devuelve la imagen ajustada al area disponible. Si ya entra, la deja igual."
   [^BufferedImage imagen ancho-disp alto-disp]
   (let [ancho-img (.getWidth imagen)
         alto-img (.getHeight imagen)
-        factor (factor-de-escala ancho-img alto-img ancho-disp alto-disp)]
+        factor (ui/factor-de-escala ancho-img alto-img ancho-disp alto-disp)]
     (if (>= factor 1.0)
       imagen
       (.getScaledInstance imagen
@@ -144,29 +102,14 @@
 ;; -----------------------------------------------------------------------------
 ;; Entrada / salida de archivos
 ;; -----------------------------------------------------------------------------
-
-(defn- elegir-archivo-abrir []
-  (let [selector (JFileChooser.)]
-    (.setFileFilter selector
-                    (FileNameExtensionFilter. "Imagenes (PNG, JPG)"
-                                              (into-array String ["png" "jpg" "jpeg"])))
-    (when (= JFileChooser/APPROVE_OPTION
-             (.showOpenDialog selector ^JFrame (:frame @componentes)))
-      (.getSelectedFile selector))))
-
-(defn- elegir-archivo-guardar []
-  (let [selector (JFileChooser.)]
-    (when (= JFileChooser/APPROVE_OPTION
-             (.showSaveDialog selector ^JFrame (:frame @componentes)))
-      (.getSelectedFile selector))))
+;; La E/S concreta (leer/escribir y dialogos) vive en el namespace io. Aca solo
+;; se la coordina con el estado de la aplicacion.
 
 (defn- guardar-en!
   "Escribe la imagen actual en el archivo dado y lo recuerda como archivo activo."
-  [^File archivo]
-  (let [formato (formato-de-archivo archivo)
-        ^BufferedImage imagen (preparar-para-formato (imagen-actual) formato)]
-    (ImageIO/write imagen ^String formato archivo)
-    (swap! estado assoc :archivo archivo)))
+  [archivo]
+  (io/escribir-imagen! (imagen-actual) archivo)
+  (swap! estado assoc :archivo archivo))
 
 ;; -----------------------------------------------------------------------------
 ;; Procesamiento en segundo plano (concurrencia)
@@ -205,8 +148,8 @@
 ;; -----------------------------------------------------------------------------
 
 (defn abrir []
-  (when-let [^File archivo (elegir-archivo-abrir)]
-    (when-let [imagen (ImageIO/read archivo)]
+  (when-let [archivo (io/elegir-archivo-abrir (:frame @componentes))]
+    (when-let [imagen (io/leer-imagen archivo)]
       (swap! estado assoc
              :imagen-original imagen
              :imagen-actual imagen
@@ -217,7 +160,7 @@
 
 (defn guardar-como []
   (when (imagen-actual)
-    (when-let [archivo (elegir-archivo-guardar)]
+    (when-let [archivo (io/elegir-archivo-guardar (:frame @componentes))]
       (guardar-en! archivo))))
 
 (defn guardar []
@@ -242,7 +185,7 @@
   (let [^JList lista (:lista @componentes)
         indice (.getSelectedIndex lista)]
     (when (>= indice 0)
-      (swap! estado update :pipeline quitar-en indice)
+      (swap! estado update :pipeline ui/quitar-en indice)
       (refrescar-lista!))))
 
 (defn aplicar
@@ -275,7 +218,7 @@
                       (reify ActionListener
                         (actionPerformed [_ _] (manejador)))))
 
-(defn- crear-selector-filtros []
+(defn- ^JComboBox crear-selector-filtros []
   (let [selector (JComboBox.)]
     (doseq [filtro filtros/filtros]
       (.addItem selector (:label filtro)))
