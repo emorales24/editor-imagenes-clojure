@@ -66,3 +66,42 @@ La funcion `aplicar-pipeline` aplica los filtros en orden con `reduce`.
 El nucleo funcional solo recibe una imagen, aplica transformaciones y devuelve una imagen nueva.
 
 Esto permite testearlo por separado y reutilizarlo desde una interfaz grafica, una interfaz de consola u otra capa de entrada/salida.
+
+## Capas y separacion de responsabilidades
+
+El programa sigue la separacion que pide la consigna entre **logica pura**, **E/S de archivos** e **interfaz**, repartida en namespaces:
+
+- **`filters.clj`**: logica pura de procesamiento (filtros y pipeline). No conoce a ningun otro namespace.
+- **`io.clj`**: entrada/salida de archivos. Lee y escribe imagenes (`ImageIO`), reconoce el formato segun la extension, aplana el alfa para JPEG y muestra los dialogos de seleccion de archivo. No depende del estado ni de los componentes de la UI: recibe la imagen y el archivo (o el frame padre) como argumentos.
+- **`ui-helpers.clj`**: helpers **puros** de la capa de presentacion (`quitar-en` para editar el pipeline, `factor-de-escala` para ajustar la imagen al area visible). Al estar libres de Swing se pueden testear de forma aislada (`ui_helpers_test.clj`).
+- **`app.clj`**: la interfaz grafica en si (construccion de la ventana), el estado mutable de la aplicacion, el manejo de eventos y la concurrencia. Coordina a `filters`, `io` y `ui-helpers`.
+- **`core.clj`**: punto de entrada; solo lanza la interfaz.
+
+La dependencia va siempre `core` → `app` → (`filters`, `io`, `ui-helpers`).
+
+### Por que Swing
+
+La interfaz usa **Swing**, que viene incluido en el JDK, a diferencia de JavaFX. Lo que evita dependencias externas: asi `lein run` funciona sin configuracion adicional.
+
+## Estado de la aplicacion
+
+El estado vive en un unico `atom`:
+
+```clojure
+{:imagen-original ...  ; la imagen tal como se cargo
+ :imagen-actual   ...  ; la imagen que se esta mostrando
+ :archivo         ...  ; el archivo asociado (para "Guardar")
+ :pipeline        []}  ; vector de ids de filtros
+```
+
+Mantener la imagen original aparte permite que "Aplicar" siempre parta de ella y que "Reset" la restaure sin reabrir el archivo.
+
+## Concurrencia
+
+Aplicar el pipeline puede tardar, asi que es mejor evitar que corra en el hilo de la interfaz (si lo hiciera, la ventana se congelaria). El esquema es:
+
+1. Al presionar **Aplicar**, se marca la UI como "Procesando…" (botones deshabilitados y cursor de reloj).
+2. El calculo se lanza en otro hilo con `future`.
+3. Cuando termina, la imagen modificada vuelve al hilo de la interfaz con `SwingUtilities/invokeLater` (Swing solo permite tocar la UI desde su propio hilo).
+
+Ademas, cada filtro paraleliza su trabajo internamente con `pmap` (una fila por tarea), aprovechando todos los cores. Es seguro porque cada pixel de salida se calcula leyendo la imagen original, que es inmutable durante ese filtro.
