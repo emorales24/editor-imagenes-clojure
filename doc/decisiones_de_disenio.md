@@ -81,7 +81,7 @@ La dependencia va siempre `core` → `app` → (`filters`, `io`, `ui-helpers`).
 
 ### Por que Swing
 
-La interfaz usa **Swing**, que viene incluido en el JDK, a diferencia de JavaFX. Lo que evitadependencias externas: asi `lein run` funciona sin configuracion adicional.
+La interfaz usa **Swing**, que viene incluido en el JDK, a diferencia de JavaFX. Lo que evita dependencias externas: asi `lein run` funciona sin configuracion adicional.
 
 ## Estado de la aplicacion
 
