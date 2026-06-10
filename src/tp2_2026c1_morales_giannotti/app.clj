@@ -7,8 +7,9 @@
             [tp2-2026c1-morales-giannotti.ui-helpers :as ui])
   (:import [javax.swing JFrame JPanel JButton JLabel JComboBox JList JScrollPane
             DefaultListModel JMenuBar JMenu JMenuItem SwingUtilities
-            ImageIcon BorderFactory BoxLayout AbstractButton JProgressBar JViewport]
-           [java.awt BorderLayout Dimension Cursor Image]
+            ImageIcon BorderFactory BoxLayout AbstractButton JProgressBar JViewport
+            JSplitPane JComponent]
+           [java.awt BorderLayout Dimension Cursor Image Component]
            [java.awt.event ActionListener ComponentAdapter]
            [java.awt.image BufferedImage]))
 
@@ -31,6 +32,12 @@
 
 (defn- imagen-actual []
   (:imagen-actual @estado))
+
+(def ancho-base-ventana 1000)
+(def alto-base-ventana 700)
+(def fuente-base 14.0)
+(def alto-control-base 34)
+(def alto-fila-base 28)
 
 ;; -----------------------------------------------------------------------------
 ;; Actualizacion de la interfaz
@@ -98,6 +105,37 @@
   (let [^JProgressBar barra (:barra-progreso @componentes)]
     (.setMaximum barra (max 1 total))
     (.setValue barra completados)))
+
+(defn- escala-ui
+  "Calcula una escala visual acotada segun el tamano actual de la ventana."
+  [^JFrame frame]
+  (let [tamano (.getSize frame)
+        escala-ancho (/ (.width tamano) (double ancho-base-ventana))
+        escala-alto (/ (.height tamano) (double alto-base-ventana))]
+    (-> (min escala-ancho escala-alto)
+        (max 0.90)
+        (min 1.45))))
+
+(defn- ajustar-alto-control!
+  [^Component componente escala]
+  (let [preferido (.getPreferredSize componente)
+        alto (int (* alto-control-base escala))]
+    (.setPreferredSize componente (Dimension. (.width preferido) alto))
+    (.setMaximumSize componente (Dimension. Integer/MAX_VALUE alto))))
+
+(defn- actualizar-escala-ui!
+  "Escala fuentes y alturas de controles cuando cambia el tamano de ventana."
+  []
+  (let [{:keys [frame controles-escalables lista]} @componentes
+        escala (escala-ui frame)
+        fuente (float (* fuente-base escala))]
+    (doseq [^Component componente controles-escalables]
+      (.setFont componente (.deriveFont (.getFont componente) fuente)))
+    (doseq [^Component componente (:controles-altura @componentes)]
+      (ajustar-alto-control! componente escala))
+    (.setFixedCellHeight ^JList lista (int (* alto-fila-base escala)))
+    (.revalidate ^JFrame frame)
+    (.repaint ^JFrame frame)))
 
 ;; -----------------------------------------------------------------------------
 ;; Entrada / salida de archivos
@@ -224,13 +262,24 @@
       (.addItem selector (:label filtro)))
     selector))
 
+(defn- expandir-horizontalmente!
+  "Hace que un control use todo el ancho disponible dentro de un BoxLayout."
+  [^JComponent componente]
+  (let [preferido (.getPreferredSize componente)]
+    (.setAlignmentX componente Component/LEFT_ALIGNMENT)
+    (.setMaximumSize componente (Dimension. Integer/MAX_VALUE (.height preferido)))
+    componente))
+
 (defn- crear-panel-filtros
   "Panel lateral: lista del pipeline, selector y botones de accion."
   []
   (let [panel (JPanel.)
         modelo (DefaultListModel.)
         lista (JList. modelo)
+        scroll-lista (JScrollPane. lista)
         selector (crear-selector-filtros)
+        etiqueta-pipeline (JLabel. "Pipeline:")
+        etiqueta-selector (JLabel. "Filtro a agregar:")
         boton-agregar (JButton. "Agregar")
         boton-quitar (JButton. "Quitar")
         boton-aplicar (JButton. "Aplicar")
@@ -241,11 +290,16 @@
     (conectar boton-reset reiniciar)
     (.setLayout panel (BoxLayout. panel BoxLayout/Y_AXIS))
     (.setBorder panel (BorderFactory/createTitledBorder "Filtros"))
-    (.setPreferredSize panel (Dimension. 220 0))
+    (.setPreferredSize panel (Dimension. 260 0))
+    (.setMinimumSize panel (Dimension. 190 0))
+    (.setVisibleRowCount lista 10)
+    (doseq [componente [scroll-lista selector boton-agregar boton-quitar
+                        boton-aplicar boton-reset]]
+      (expandir-horizontalmente! componente))
     (doto panel
-      (.add (JLabel. "Pipeline:"))
-      (.add (JScrollPane. lista))
-      (.add (JLabel. "Filtro a agregar:"))
+      (.add etiqueta-pipeline)
+      (.add scroll-lista)
+      (.add etiqueta-selector)
       (.add selector)
       (.add boton-agregar)
       (.add boton-quitar)
@@ -258,7 +312,18 @@
      :boton-agregar boton-agregar
      :boton-quitar boton-quitar
      :boton-aplicar boton-aplicar
-     :boton-reset boton-reset}))
+     :boton-reset boton-reset
+     :controles-panel [panel lista selector etiqueta-pipeline etiqueta-selector
+                       boton-agregar boton-quitar boton-aplicar boton-reset]
+     :controles-altura [selector boton-agregar boton-quitar boton-aplicar boton-reset]}))
+
+(defn- ^JSplitPane crear-panel-principal
+  "Permite redimensionar el espacio entre la imagen y el panel de filtros."
+  [^JScrollPane scroll-imagen ^JPanel panel-filtros]
+  (doto (JSplitPane. JSplitPane/HORIZONTAL_SPLIT scroll-imagen panel-filtros)
+    (.setResizeWeight 1.0)
+    (.setOneTouchExpandable true)
+    (.setContinuousLayout true)))
 
 (defn- crear-menu []
   (let [barra (JMenuBar.)
@@ -278,7 +343,8 @@
       (.addSeparator)
       (.add item-salir))
     (.add barra menu)
-    barra))
+    {:barra barra
+     :controles-menu [barra menu item-abrir item-guardar item-guardar-como item-salir]}))
 
 (defn- escuchar-redimension
   "Reescala la imagen cada vez que cambia el tamano del area de visualizacion."
@@ -286,6 +352,15 @@
   (.addComponentListener scroll
                          (proxy [ComponentAdapter] []
                            (componentResized [_] (redibujar-imagen!)))))
+
+(defn- escuchar-redimension-ventana
+  "Ajusta la escala visual de controles cuando cambia el tamano de la ventana."
+  [^JFrame frame]
+  (.addComponentListener frame
+                         (proxy [ComponentAdapter] []
+                           (componentResized [_]
+                             (actualizar-escala-ui!)
+                             (redibujar-imagen!)))))
 
 (defn- ^JPanel crear-barra-estado
   "Barra inferior con el texto de estado y la barra de progreso."
@@ -304,9 +379,10 @@
         estado-label (JLabel. "Listo")
         barra-progreso (JProgressBar.)
         panel-filtros (crear-panel-filtros)
+        panel-principal (crear-panel-principal scroll-imagen (:panel panel-filtros))
+        menu (crear-menu)
         contenido (JPanel. (BorderLayout.))]
-    (.add contenido scroll-imagen BorderLayout/CENTER)
-    (.add contenido ^JPanel (:panel panel-filtros) BorderLayout/EAST)
+    (.add contenido panel-principal BorderLayout/CENTER)
     (.add contenido (crear-barra-estado estado-label barra-progreso) BorderLayout/SOUTH)
     (reset! componentes
             (merge panel-filtros
@@ -314,14 +390,22 @@
                     :etiqueta-imagen etiqueta-imagen
                     :scroll-imagen scroll-imagen
                     :estado-label estado-label
-                    :barra-progreso barra-progreso}))
+                    :barra-progreso barra-progreso
+                    :controles-escalables (vec (concat [etiqueta-imagen estado-label
+                                                        barra-progreso]
+                                                       (:controles-panel panel-filtros)
+                                                       (:controles-menu menu)))}))
     (escuchar-redimension scroll-imagen)
+    (escuchar-redimension-ventana frame)
     (doto frame
-      (.setJMenuBar (crear-menu))
+      (.setJMenuBar (:barra menu))
       (.setContentPane contenido)
       (.setDefaultCloseOperation JFrame/EXIT_ON_CLOSE)
+      (.setResizable true)
+      (.setMinimumSize (Dimension. 720 480))
       (.setSize (Dimension. 1000 700))
       (.setLocationRelativeTo nil))
+    (actualizar-escala-ui!)
     frame))
 
 (defn- mostrar-ventana []
