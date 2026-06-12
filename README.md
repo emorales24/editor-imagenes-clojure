@@ -6,7 +6,7 @@
 - **Jefe de Cátedra:** Diego Essaya  
 - **Jefe de Trabajos Prácticos:** Santiago Maraggi
 - **Correctora:** Macarena Vita Sanchez  
-
+    
 ### Integrantes del Grupo
 - Eduardo José Morales Depablos 113860 - [Video](link_aca) 
 - Fausto Giannotti 113365 - [Video](https://drive.google.com/file/d/1nsF1j2UPWm3w4AlqFLyZ7Ro0uR1VN62q/view?usp=sharing)
