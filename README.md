@@ -8,7 +8,7 @@
 - **Correctora:** Macarena Vita Sanchez  
     
 ### Integrantes del Grupo
-- Eduardo José Morales Depablos 113860 - [Video](link_aca) 
+- Eduardo José Morales Depablos 113860 - [Video](https://drive.google.com/file/d/1oVqHKBN5OOIWxO4tqGwdqiEUltv6SzJJ/view?usp=sharing) 
 - Fausto Giannotti 113365 - [Video](https://drive.google.com/file/d/1nsF1j2UPWm3w4AlqFLyZ7Ro0uR1VN62q/view?usp=sharing)
 
 ## Ejecucion
