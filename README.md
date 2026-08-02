@@ -6,40 +6,39 @@
 - **Jefe de Cátedra:** Diego Essaya  
 - **Jefe de Trabajos Prácticos:** Santiago Maraggi
 - **Correctora:** Macarena Vita Sanchez  
-
+    
 ### Integrantes del Grupo
-- Eduardo José Morales Depablos - 113860
-- Fausto Giannotti - 113365
+- Eduardo José Morales Depablos 113860 - [Video](https://drive.google.com/file/d/1oVqHKBN5OOIWxO4tqGwdqiEUltv6SzJJ/view?usp=sharing) 
+- Fausto Giannotti 113365 - [Video](https://drive.google.com/file/d/1nsF1j2UPWm3w4AlqFLyZ7Ro0uR1VN62q/view?usp=sharing)
 
-## Installation
+## Ejecucion
 
-Download from http://example.com/FIXME.
+Instalar dependencias:
 
-## Usage
+```bash
+lein deps
+```
 
-FIXME: explanation
+Ejecutar la aplicacion:
 
-    $ java -jar tp2-2026c1-morales-giannotti-0.1.0-standalone.jar [args]
+```bash
+lein run
+```
 
-## Options
+Correr los tests:
 
-FIXME: listing of options this app accepts.
+```bash
+lein test
+```
 
-## Examples
+Formatos soportados:
 
-...
-
-### Bugs
-
-...
-
-### Any Other Sections
-### That You Think
-### Might be Useful
+- PNG
+- JPG/JPEG
 
 ## License
 
-Copyright © 2026 FIXME
+Copyright © 2026 Eduardo José Morales Depablos y Fausto Giannotti
 
 This program and the accompanying materials are made available under the
 terms of the Eclipse Public License 2.0 which is available at
